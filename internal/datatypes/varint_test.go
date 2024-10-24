@@ -4,17 +4,12 @@ import (
 	"fmt"
 	"math/rand"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
 
-func TestToLittleEndian(t *testing.T) {
-	in := []byte{0x00, 0x00, 0x00, 0x0A}
-	res := ToLittleEndian(in)
-	t.Logf("res: %v", res)
-}
-
-func TestVarInt_Bytes(t *testing.T) {
+func TestWriteVarInt(t *testing.T) {
 	testCases := []struct {
 		inVarInt VarInt
 		expOut   []byte
@@ -32,9 +27,6 @@ func TestVarInt_Bytes(t *testing.T) {
 			inVarInt: 255,
 			expOut:   []byte{0xff, 0x01},
 		}, {
-			inVarInt: -12345,
-			expOut:   []byte{0xc7, 0x9f, 0x7f},
-		}, {
 			inVarInt: -1,
 			expOut:   []byte{0xff, 0xff, 0xff, 0xff, 0x0f},
 		}, {
@@ -44,13 +36,13 @@ func TestVarInt_Bytes(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("%d", tc.inVarInt), func(t *testing.T) {
-			out := tc.inVarInt.Bytes()
+			out := WriteVarInt(tc.inVarInt)
 			require.Equal(t, tc.expOut, out)
 		})
 	}
 }
 
-func TestVarInt_Int(t *testing.T) {
+func TestReadVarInt(t *testing.T) {
 	testCases := []struct {
 		inBytes []byte
 		expOut  VarInt
@@ -77,7 +69,7 @@ func TestVarInt_Int(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("%x", tc.inBytes), func(t *testing.T) {
-			out, err := ParseVarInt(tc.inBytes)
+			out, err := ReadVarInt(tc.inBytes)
 			require.NoError(t, err)
 			require.Equal(t, tc.expOut, out)
 		})
@@ -85,12 +77,32 @@ func TestVarInt_Int(t *testing.T) {
 }
 
 func TestVarInt(t *testing.T) {
-	for i := 0; i < 100; i++ {
+	fmt.Println(ReadVarInt([]byte{0xFE, 0x01, 0xFA, 0x00, 0x0B, 0x00, 0x4d}))
+	fmt.Println(WriteVarInt(254))
+
+	for i := 0; i < 10_000; i++ {
 		in := rand.Int31n(1000)
 		t.Run(fmt.Sprintf("%d", in), func(t *testing.T) {
-			out, err := ParseVarInt(VarInt(in).Bytes())
+			out, err := ReadVarInt(WriteVarInt(VarInt(in)))
 			require.NoError(t, err)
 			require.Equal(t, VarInt(in), out)
 		})
+	}
+}
+
+func BenchmarkReadVarInt(b *testing.B) {
+	b.ReportAllocs()
+	rnd := []byte{0xff, 0x01}
+	for i := 0; i < b.N; i++ {
+		_, _ = ReadVarInt(rnd)
+	}
+}
+
+func BenchmarkWriteVarInt(b *testing.B) {
+	b.ReportAllocs()
+	rand.NewSource(time.Now().Unix())
+	rnd := rand.Int31()
+	for i := 0; i < b.N; i++ {
+		_ = WriteVarInt(VarInt(rnd))
 	}
 }

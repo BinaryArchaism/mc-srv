@@ -2,18 +2,12 @@ package datatypes
 
 import (
 	"bytes"
-	"encoding/binary"
 	"errors"
-	"fmt"
 )
 
 var (
 	ErrInvalidVarInt = errors.New("invalid VarInt")
 )
-
-func ToLittleEndian(in []byte) int {
-	return int(binary.BigEndian.Uint32(in))
-}
 
 const (
 	segmentBits uint8 = 0x7F // binary 0111 1111
@@ -25,33 +19,24 @@ const (
 // VarInt for LEB128 representation
 type VarInt int32
 
-func (v VarInt) Bytes() []byte {
-	const SEGMENT_BITS int32 = 0x7F
-	const CONTINUE_BIT int32 = 0x80
+func WriteVarInt(v VarInt) []byte {
 	buf := bytes.NewBuffer([]byte{})
+	b := uint32(v)
 	for {
-		fmt.Printf("%x\n", v)
-		ck := byte(v)
-		if (ck & ^(segmentBits)) == 0 {
-			buf.WriteByte(byte(v))
-			break
+		if b & ^(uint32(segmentBits)) == 0 {
+			buf.WriteByte(byte(b))
+			return buf.Bytes()
 		}
-		buf.WriteByte(byte((int32(v) & SEGMENT_BITS) | CONTINUE_BIT))
-		v >>= shift
+		buf.WriteByte(byte((b & uint32(segmentBits)) | uint32(continueBit)))
+		b = b >> shift
 	}
-	return buf.Bytes()
 }
 
-func ParseVarInt(in []byte) (VarInt, error) {
+func ReadVarInt(in []byte) (VarInt, error) {
 	var (
 		res int32
 		pos int32
 	)
-
-	if len(in) > 5 {
-		return 0, ErrInvalidVarInt
-	}
-
 	for _, b := range in {
 		res |= (int32(b & segmentBits)) << pos
 		if b&continueBit == 0 {
