@@ -38,14 +38,12 @@ func (s *Server) Accept(ctx context.Context) error {
 			if err != nil {
 				fmt.Println("Error accepting connection:", err)
 			}
-			go handleConnection(conn)
+			go s.HandleConnection(conn)
 		}
 	}
 }
 
-const version = 769
-
-func handleConnection(conn net.Conn) {
+func (s *Server) HandleConnection(conn net.Conn) {
 	defer func() {
 		if err := recover(); err != nil {
 			fmt.Println(err)
@@ -54,7 +52,7 @@ func handleConnection(conn net.Conn) {
 	defer func(conn net.Conn) {
 		err := conn.Close()
 		if err != nil {
-
+			fmt.Println("Error closing connection:", err)
 		}
 	}(conn)
 	fmt.Println("Client connected:", conn.RemoteAddr().String())
@@ -68,40 +66,57 @@ func handleConnection(conn net.Conn) {
 	}
 	fmt.Printf(" <- Client handshake packet received: %+v\n", hsPacket)
 
+	switch hsPacket.NextState {
+	case 1:
+		err = s.PingSession(conn)
+		if err != nil {
+			fmt.Println("Error pinging session:", err)
+			return
+		}
+	case 2:
+		fmt.Println("Login session unsupported")
+		return
+	default:
+		return
+	}
+}
+
+func (s *Server) PingSession(conn net.Conn) error {
 	fmt.Println("=== STATUS SESSION ===")
 	b, err := readAll(conn)
 	if err != nil {
 		fmt.Println("Error reading packet:", err)
-		return
+		return err
 	}
 	fmt.Printf(" <- Client status request: %X\n", b)
 
 	err = (&protocol.StatusResponsePacket{}).Write(conn)
 	if err != nil {
 		fmt.Println("Error writing packet:", err)
-		return
+		return err
 	}
 	fmt.Println(" -> Server status response")
 
 	fmt.Println("=== PING SESSION ===")
-	for {
-		b, err := readAll(conn)
-		if err != nil {
-			fmt.Println("Error reading packet:", err)
-			return
-		}
-		if len(b) == 0 {
-			fmt.Println("Error reading packet: buffer is empty")
-			return
-		}
-		fmt.Printf(" <- Client ping request: %X\n", b)
-		_, err = conn.Write(b)
-		if err != nil {
-			fmt.Println("Error writing packet:", err)
-			return
-		}
-		fmt.Println(" -> Server ping response")
+
+	b, err = readAll(conn)
+	if err != nil {
+		fmt.Println("Error reading packet:", err)
+		return err
 	}
+	if len(b) == 0 {
+		fmt.Println("Error reading packet: buffer is empty")
+		return err
+	}
+	fmt.Printf(" <- Client ping request: %X\n", b)
+	_, err = conn.Write(b)
+	if err != nil {
+		fmt.Println("Error writing packet:", err)
+		return err
+	}
+	fmt.Println(" -> Server ping response")
+	fmt.Println("=== CLOSE CONNECTION ===")
+	return nil
 }
 
 func readAll(r io.Reader) ([]byte, error) {
