@@ -77,9 +77,6 @@ func TestReadVarInt(t *testing.T) {
 }
 
 func TestVarInt(t *testing.T) {
-	fmt.Println(ReadVarInt([]byte{0xFE, 0x01, 0xFA, 0x00, 0x0B, 0x00, 0x4d}))
-	fmt.Println(WriteVarInt(254))
-
 	for i := 0; i < 10_000; i++ {
 		in := rand.Int31n(1000)
 		t.Run(fmt.Sprintf("%d", in), func(t *testing.T) {

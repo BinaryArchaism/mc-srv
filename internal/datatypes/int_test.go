@@ -6,10 +6,18 @@ import (
 	"testing"
 )
 
-func TestUint16(t *testing.T) {
-	for i := 0; i < 10_000; i++ {
+func TestShort(t *testing.T) {
+	for i := 0; i < 1000; i++ {
+		rnd := int16(rand.Int31())
+		res := ReadShort(WriteShort(Short(rnd)))
+		require.Equal(t, rnd, int16(res))
+	}
+}
+
+func TestUShort(t *testing.T) {
+	for i := 0; i < 1000; i++ {
 		rnd := uint16(rand.Int31())
-		res := ReadUint16(WriteUint16(Uint16(rnd)))
+		res := ReadUShort(WriteUShort(UShort(rnd)))
 		require.Equal(t, rnd, uint16(res))
 	}
 }

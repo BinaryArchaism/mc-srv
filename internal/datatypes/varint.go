@@ -51,3 +51,25 @@ func ReadVarInt(in []byte) (VarInt, error) {
 
 	return VarInt(res), nil
 }
+
+func ReadVarIntN(in []byte) (VarInt, int, error) {
+	var (
+		res int32
+		pos int32
+		n   int
+	)
+	for _, b := range in {
+		n++
+		res |= (int32(b & segmentBits)) << pos
+		if b&continueBit == 0 {
+			break
+		}
+		pos += shift
+	}
+
+	if pos >= int32Len {
+		return 0, 0, ErrInvalidVarInt
+	}
+
+	return VarInt(res), n, nil
+}

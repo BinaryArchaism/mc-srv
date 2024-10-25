@@ -4,7 +4,7 @@ import "bytes"
 
 type String struct {
 	Size VarInt
-	Data []byte
+	Data string
 }
 
 func FromString(s string) String {
@@ -15,7 +15,7 @@ func FromString(s string) String {
 	}
 	return String{
 		Size: length,
-		Data: data,
+		Data: string(data),
 	}
 }
 
@@ -26,7 +26,7 @@ func ToString(s String) string {
 func WriteString(s String) []byte {
 	buf := bytes.NewBuffer([]byte{})
 	buf.Write(WriteVarInt(s.Size))
-	buf.Write(s.Data)
+	buf.Write([]byte(s.Data))
 	return buf.Bytes()
 }
 
@@ -38,8 +38,20 @@ func ReadString(b []byte) String {
 	}
 	return String{
 		Size: length,
-		Data: data,
+		Data: string(data),
 	}
+}
+
+func ReadStringN(b []byte) (String, int) {
+	length, l, _ := ReadVarIntN(b)
+	data := make([]byte, 0, length)
+	for i := l; i < int(length)+l; i++ {
+		data = append(data, b[i])
+	}
+	return String{
+		Size: length,
+		Data: string(data),
+	}, len(data) + l
 }
 
 func ReadStrings(byteStrings []byte) []String {
@@ -50,7 +62,7 @@ func ReadStrings(byteStrings []byte) []String {
 		str := byteStrings[i+varIntBytesLen+1 : i+varIntBytesLen+1+int(length)]
 		res = append(res, String{
 			Size: length,
-			Data: str,
+			Data: string(str),
 		})
 	}
 	return res
