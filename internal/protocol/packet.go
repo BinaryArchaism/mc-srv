@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/BinaryArchaism/mc-srv/internal/datatypes"
 	"github.com/google/uuid"
 	"io"
@@ -257,10 +258,11 @@ type Packet struct {
 type LoginSuccessPacket struct {
 	Packet
 
-	UUID       uuid.UUID
-	UserName   datatypes.String
-	NumOfProps int
-	Property   []Property
+	UUID                uuid.UUID
+	UserName            datatypes.String
+	NumOfProps          int
+	Property            []Property
+	StrictErrorHandling datatypes.Boolean
 }
 
 type Property struct {
@@ -277,7 +279,8 @@ func (p *LoginSuccessPacket) Write(w io.Writer) error {
 
 	p.ID = 0x02
 
-	buf := bytes.NewBuffer(make([]byte, 1024))
+	buf := bytes.NewBuffer(make([]byte, 0, 1024))
+	buf.Write(datatypes.WriteVarInt(datatypes.VarInt(p.ID)))
 	buf.Write(p.UUID[:])
 	buf.Write(datatypes.WriteString(p.UserName))
 	buf.Write(datatypes.WriteVarInt(datatypes.VarInt(p.NumOfProps)))
@@ -290,16 +293,19 @@ func (p *LoginSuccessPacket) Write(w io.Writer) error {
 			buf.Write(datatypes.WriteString(p.Property[i].Signature))
 		}
 	}
-	p.Length = 1 + buf.Len()
+	buf.WriteByte(datatypes.WriteBoolean(p.StrictErrorHandling))
 
-	_, err := w.Write(datatypes.WriteVarInt(datatypes.VarInt(p.Length)))
+	p.Length = buf.Len()
+
+	resBuf := bytes.Buffer{}
+	resBuf.Write(datatypes.WriteVarInt(datatypes.VarInt(p.Length)))
+	resBuf.Write(buf.Bytes())
+
+	to, err := resBuf.WriteTo(w)
 	if err != nil {
 		return err
 	}
-	_, err = w.Write(buf.Bytes())
-	if err != nil {
-		return err
-	}
+	fmt.Println(to, p.Length)
 
 	return nil
 }

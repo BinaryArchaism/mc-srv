@@ -2,8 +2,12 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"github.com/BinaryArchaism/mc-srv/internal/datatypes"
 	"github.com/BinaryArchaism/mc-srv/internal/protocol"
+	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
 	"io"
 	"net"
 )
@@ -15,7 +19,7 @@ type Server struct {
 func New() (*Server, error) {
 	listener, err := net.Listen("tcp", ":8080")
 	if err != nil {
-		fmt.Println("Error starting TCP server:", err)
+		log.Err(err).Msg("Error starting TCP server")
 		return nil, err
 	}
 	return &Server{
@@ -57,35 +61,35 @@ func (s *Server) HandleConnection(conn net.Conn) {
 	defer func(conn net.Conn) {
 		err := conn.Close()
 		if err != nil {
-			fmt.Println("Error closing connection:", err)
+			log.Err(err).Msg("Error closing connection")
 		}
+		log.Trace().Str("client", conn.RemoteAddr().String()).Msg("Connection closed")
 	}(conn)
-	fmt.Println("Client connected:", conn.RemoteAddr().String())
+	log.Trace().Msgf("Client connected: %s", conn.RemoteAddr().String())
 
-	fmt.Println("=== HANDSHAKE SESSION ===")
 	var hsPacket protocol.HandshakePacket
 	err := hsPacket.Read(conn)
 	if err != nil {
-		fmt.Println("Error reading handshake packet:", err)
+		log.Err(err).Msg("Error reading handshake packet")
 		return
 	}
-	fmt.Printf(" <- Client handshake packet received: %+v\n", hsPacket)
+	log.Trace().Any("handshake packet", hsPacket).Msg("serverbound")
 
 	switch hsPacket.NextState {
 	case statusState:
 		err = s.PingSession(conn)
 		if err != nil {
-			fmt.Println("Error pinging session:", err)
+			log.Err(err).Msg("Error while ping session")
 			return
 		}
 	case loginStatus:
 		err = s.LoginSession(conn)
 		if err != nil {
-			fmt.Println("Error logging in:", err)
+			log.Err(err).Msg("Error while logging")
 			return
 		}
 	default:
-		fmt.Println("Unknown handshake packet:", hsPacket.NextState)
+		log.Error().Int("handshake packet next state", int(hsPacket.NextState)).Msg("Unknown handshake packet")
 		return
 	}
 }
@@ -102,54 +106,52 @@ func (s *Server) LoginSession(conn net.Conn) error {
 	//	return err
 	//}
 	loginSuccessPacket := protocol.LoginSuccessPacket{
-		UUID:       loginPacket.PlayerUUID,
-		UserName:   loginPacket.Name,
-		NumOfProps: 0,
-		Property:   nil,
+		UUID:     uuid.MustParse("4566e69fc90748ee8d71d7ba5aa00d20"),
+		UserName: datatypes.FromString("Thinkofdeath"),
 	}
 	err = loginSuccessPacket.Write(conn)
 	if err != nil {
 		return err
 	}
 
+	b, err := readAll(conn)
+	if err != nil {
+		return err
+	}
+	log.Trace().Bytes("login ack packet", b).Msg("serverbound")
+
 	return nil
 }
 
 func (s *Server) PingSession(conn net.Conn) error {
-	fmt.Println("=== STATUS SESSION ===")
 	b, err := readAll(conn)
 	if err != nil {
-		fmt.Println("Error reading packet:", err)
-		return err
+		return fmt.Errorf("error reading status request: %w", err)
 	}
-	fmt.Printf(" <- Client status request: %X\n", b)
+	log.Trace().Bytes("status request packet", b).Msg("serverbound")
 
-	err = (&protocol.StatusResponsePacket{}).Write(conn)
+	var statusResponse protocol.StatusResponsePacket
+	err = statusResponse.Write(conn)
 	if err != nil {
-		fmt.Println("Error writing packet:", err)
-		return err
+		return fmt.Errorf("error writing status response: %w", err)
 	}
-	fmt.Println(" -> Server status response")
-
-	fmt.Println("=== PING SESSION ===")
+	log.Trace().Any("status response packet", statusResponse).Msg("clientbound")
 
 	b, err = readAll(conn)
 	if err != nil {
-		fmt.Println("Error reading packet:", err)
-		return err
+		return fmt.Errorf("error reading ping request: %w", err)
 	}
 	if len(b) == 0 {
-		fmt.Println("Error reading packet: buffer is empty")
-		return err
+		return errors.New("ping request is empty")
 	}
-	fmt.Printf(" <- Client ping request: %X\n", b)
+	log.Trace().Bytes("ping request packet", b).Msg("serverbound")
+
 	_, err = conn.Write(b)
 	if err != nil {
-		fmt.Println("Error writing packet:", err)
-		return err
+		return fmt.Errorf("error writing pong response: %w", err)
 	}
-	fmt.Println(" -> Server ping response")
-	fmt.Println("=== CLOSE CONNECTION ===")
+	log.Trace().Bytes("pong response packet", b).Msg("clientbound")
+
 	return nil
 }
 
