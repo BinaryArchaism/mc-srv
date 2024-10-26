@@ -83,3 +83,12 @@ func BinaryReadVarInt(in io.ByteReader) (VarInt, error) {
 	}
 	return VarInt(pl), nil
 }
+
+func BinaryWriteVarInt(v int) []byte {
+	if v < 0 {
+		panic(ErrInvalidVarInt)
+	}
+	b := make([]byte, 5)
+	b = b[:binary.PutUvarint(b, uint64(v))]
+	return b
+}

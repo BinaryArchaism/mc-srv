@@ -10,7 +10,34 @@ import (
 	"io"
 )
 
-// TODO pool of bytes
+type PacketWorker struct {
+	bytesPool *BytesPool
+}
+
+func NewPacketWorker() *PacketWorker {
+	return &PacketWorker{
+		bytesPool: NewBytesPool(),
+	}
+}
+
+//func (pw *PacketWorker) WritePacketTo(conn io.Writer, packet bytes.Buffer) error {
+//	buf := pw.bytesPool.Get()
+//	_, err := buf.ReadFrom(packet)
+//	if err != nil {
+//		return err
+//	}
+//	b := make([]byte, 5)
+//	_, err = conn.Write(b[:binary.PutUvarint(b, uint64(buf.Len()))])
+//	if err != nil {
+//		return err
+//	}
+//	_, err = buf.WriteTo(conn)
+//	if err != nil {
+//		return err
+//	}
+//
+//	return nil
+//}
 
 type HandshakePacket struct {
 	Length datatypes.VarInt
@@ -22,7 +49,7 @@ type HandshakePacket struct {
 	NextState       datatypes.VarInt
 }
 
-func (p *HandshakePacket) Read(r io.Reader) error {
+func (p *HandshakePacket) ReadCustom(r io.Reader) error {
 	packetBytes := make([]byte, 32)
 	_, err := r.Read(packetBytes)
 	if err != nil {
@@ -306,6 +333,96 @@ func (p *LoginSuccessPacket) Write(w io.Writer) error {
 		return err
 	}
 	fmt.Println(to, p.Length)
+
+	return nil
+}
+
+type ClientboundKnownPacksPacket struct {
+	Packet
+
+	KnownPacketCount int
+	KnownPacket      []KnownPack
+}
+
+type KnownPack struct {
+	Namespace datatypes.String
+	ID        datatypes.String
+	Version   datatypes.String
+}
+
+func (p *ClientboundKnownPacksPacket) Write(w io.Writer) error {
+	if p.KnownPacketCount != len(p.KnownPacket) {
+		return errors.New("invalid number of props")
+	}
+
+	buf := Pool.Get()
+	defer Pool.Put(buf)
+	buf.Reset()
+
+	p.Packet.ID = 0x0E
+	buf.Write(datatypes.BinaryWriteVarInt(p.ID))
+	buf.Write(datatypes.BinaryWriteVarInt(p.KnownPacketCount))
+	for _, kp := range p.KnownPacket {
+		buf.Write(datatypes.WriteString(kp.Namespace))
+		buf.Write(datatypes.WriteString(kp.ID))
+		buf.Write(datatypes.WriteString(kp.Version))
+	}
+
+	p.Length = buf.Len() + 1
+
+	l, err := w.Write(datatypes.BinaryWriteVarInt(p.Length))
+	if err != nil {
+		return err
+	}
+
+	n, err := buf.WriteTo(w)
+	if err != nil {
+		return err
+	}
+
+	if n+int64(l) != int64(p.Length) {
+		return io.ErrShortWrite
+	}
+
+	return nil
+}
+
+func (p *ClientboundKnownPacksPacket) Read(r io.Reader) error {
+	b := make([]byte, 1024)
+	_, err := r.Read(b)
+	if err != nil {
+		return err
+	}
+	buf := bytes.NewBuffer(b)
+
+	packetLen, err := datatypes.BinaryReadVarInt(buf)
+	if err != nil {
+		return err
+	}
+	packetID, err := datatypes.BinaryReadVarInt(buf)
+	if err != nil {
+		return err
+	}
+
+	knownPackCount, err := datatypes.BinaryReadVarInt(buf)
+	if err != nil {
+		return err
+	}
+
+	knownPacks := make([]KnownPack, 0, knownPackCount)
+	var tmpKP KnownPack
+	for i := 0; i < int(knownPackCount); i++ {
+		tmpKP.Namespace = datatypes.ReadStringReader(buf)
+		tmpKP.ID = datatypes.ReadStringReader(buf)
+		tmpKP.Version = datatypes.ReadStringReader(buf)
+		knownPacks = append(knownPacks, tmpKP)
+	}
+
+	p.Packet.Length = int(packetLen)
+	p.Packet.ID = int(packetID)
+
+	p.KnownPacketCount = int(knownPackCount)
+	p.KnownPacket = knownPacks
 
 	return nil
 }
