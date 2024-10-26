@@ -21,8 +21,7 @@ func NewPacketWorker() *PacketWorker {
 }
 
 type HandshakePacket struct {
-	Length int
-	ID     int
+	Packet
 
 	ProtocolVersion int
 	ServerAddress   datatypes.String
@@ -259,27 +258,50 @@ type Packet struct {
 	ID     int
 }
 
-func Read(r io.Reader) (Packet, error) {
+func (p *Packet) Read(r io.Reader) error {
 	poolBytes := Pool.Get()
 	defer Pool.Put(poolBytes)
 
 	_, err := r.Read(poolBytes)
 	if err != nil {
-		return Packet{}, err
+		return err
 	}
 
 	buf := bytes.NewBuffer(poolBytes)
 
-	packetLen, err := datatypes.BinaryReadVarInt(buf)
+	p.Length, err = datatypes.BinaryReadVarInt(buf)
 	if err != nil {
-		return Packet{}, err
+		return err
 	}
-	packetID, err := datatypes.BinaryReadVarInt(buf)
+	p.ID, err = datatypes.BinaryReadVarInt(buf)
 	if err != nil {
-		return Packet{}, err
+		return err
 	}
 
-	return Packet{packetLen, packetID}, nil
+	return nil
+}
+
+func (p *Packet) Write(w io.Writer) error {
+	poolBytes := Pool.Get()
+	defer Pool.Put(poolBytes)
+
+	buf := bytes.NewBuffer(poolBytes)
+	buf.Reset()
+
+	_, err := buf.Write(datatypes.BinaryWriteVarInt(p.Length))
+	if err != nil {
+		return err
+	}
+	_, err = buf.Write(datatypes.BinaryWriteVarInt(p.ID))
+	if err != nil {
+		return err
+	}
+
+	_, err = buf.WriteTo(w)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 type LoginSuccessPacket struct {

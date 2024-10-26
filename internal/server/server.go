@@ -42,15 +42,35 @@ func (s *Server) Accept(ctx context.Context) error {
 			if err != nil {
 				fmt.Println("Error accepting connection:", err)
 			}
-			go s.HandleConnection(conn)
+			log.Info().Str("accepting conn on address", conn.LocalAddr().String()).Msg("accept")
+			go s.Handle(conn)
 		}
 	}
 }
 
-const (
-	statusState = 1
-	loginStatus = 2
-)
+func (s *Server) Handle(conn net.Conn) {
+	defer func() {
+		if err := recover(); err != nil {
+			fmt.Println(err)
+		}
+	}()
+	defer func(conn net.Conn) {
+		err := conn.Close()
+		if err != nil {
+			log.Err(err).Msg("Error closing connection")
+		}
+		log.Trace().Str("client", conn.RemoteAddr().String()).Msg("Connection closed")
+	}(conn)
+
+	session := NewSession(conn)
+
+	err := session.Execute()
+	if err != nil {
+		log.Err(err).Msg("Error executing session")
+		return
+	}
+	log.Info().Str("client", conn.RemoteAddr().String()).Msg("Session handled")
+}
 
 func (s *Server) HandleConnection(conn net.Conn) {
 	defer func() {
