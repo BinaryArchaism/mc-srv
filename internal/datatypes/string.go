@@ -1,6 +1,9 @@
 package datatypes
 
-import "bytes"
+import (
+	"bytes"
+	"io"
+)
 
 type String struct {
 	Size VarInt
@@ -52,6 +55,25 @@ func ReadStringN(b []byte) (String, int) {
 		Size: length,
 		Data: string(data),
 	}, len(data) + l
+}
+
+func ReadStringReader(in io.ByteReader) String {
+	l, err := BinaryReadVarInt(in)
+	if err != nil {
+		return String{}
+	}
+	data := make([]byte, 0, l)
+	for i := 0; i < int(l); i++ {
+		b, err := in.ReadByte()
+		if err != nil {
+			return String{}
+		}
+		data = append(data, b)
+	}
+	return String{
+		Size: l,
+		Data: string(data),
+	}
 }
 
 func ReadStrings(byteStrings []byte) []String {

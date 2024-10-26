@@ -2,7 +2,9 @@ package datatypes
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
+	"io"
 )
 
 var (
@@ -72,4 +74,12 @@ func ReadVarIntN(in []byte) (VarInt, int, error) {
 	}
 
 	return VarInt(res), n, nil
+}
+
+func BinaryReadVarInt(in io.ByteReader) (VarInt, error) {
+	pl, err := binary.ReadUvarint(in)
+	if err != nil {
+		return 0, err
+	}
+	return VarInt(pl), nil
 }

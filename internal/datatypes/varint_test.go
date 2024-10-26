@@ -1,6 +1,7 @@
 package datatypes
 
 import (
+	"bytes"
 	"fmt"
 	"math/rand"
 	"testing"
@@ -70,6 +71,40 @@ func TestReadVarInt(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("%x", tc.inBytes), func(t *testing.T) {
 			out, err := ReadVarInt(tc.inBytes)
+			require.NoError(t, err)
+			require.Equal(t, tc.expOut, out)
+		})
+	}
+}
+func TestDoneVarInt(t *testing.T) {
+	testCases := []struct {
+		inBytes []byte
+		expOut  VarInt
+	}{
+		{
+			inBytes: []byte{0x00},
+			expOut:  0,
+		}, {
+			inBytes: []byte{0x01},
+			expOut:  1,
+		}, {
+			inBytes: []byte{0x80, 0x01},
+			expOut:  128,
+		}, {
+			inBytes: []byte{0xff, 0x01},
+			expOut:  255,
+		}, {
+			inBytes: []byte{0xff, 0xff, 0xff, 0xff, 0x0f},
+			expOut:  -1,
+		}, {
+			inBytes: []byte{0x80, 0x80, 0x80, 0x80, 0x08},
+			expOut:  -2147483648,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("%x", tc.inBytes), func(t *testing.T) {
+			buf := bytes.NewBuffer(tc.inBytes)
+			out, err := BinaryReadVarInt(buf)
 			require.NoError(t, err)
 			require.Equal(t, tc.expOut, out)
 		})

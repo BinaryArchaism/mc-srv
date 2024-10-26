@@ -43,6 +43,11 @@ func (s *Server) Accept(ctx context.Context) error {
 	}
 }
 
+const (
+	statusState = 1
+	loginStatus = 2
+)
+
 func (s *Server) HandleConnection(conn net.Conn) {
 	defer func() {
 		if err := recover(); err != nil {
@@ -67,18 +72,47 @@ func (s *Server) HandleConnection(conn net.Conn) {
 	fmt.Printf(" <- Client handshake packet received: %+v\n", hsPacket)
 
 	switch hsPacket.NextState {
-	case 1:
+	case statusState:
 		err = s.PingSession(conn)
 		if err != nil {
 			fmt.Println("Error pinging session:", err)
 			return
 		}
-	case 2:
-		fmt.Println("Login session unsupported")
-		return
+	case loginStatus:
+		err = s.LoginSession(conn)
+		if err != nil {
+			fmt.Println("Error logging in:", err)
+			return
+		}
 	default:
+		fmt.Println("Unknown handshake packet:", hsPacket.NextState)
 		return
 	}
+}
+
+func (s *Server) LoginSession(conn net.Conn) error {
+	var loginPacket protocol.LoginPacket
+	err := loginPacket.Read(conn)
+	if err != nil {
+		return err
+	}
+	//var disconnectPacket protocol.DisconnectPacket
+	//err = disconnectPacket.Write(conn)
+	//if err != nil {
+	//	return err
+	//}
+	loginSuccessPacket := protocol.LoginSuccessPacket{
+		UUID:       loginPacket.PlayerUUID,
+		UserName:   loginPacket.Name,
+		NumOfProps: 0,
+		Property:   nil,
+	}
+	err = loginSuccessPacket.Write(conn)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (s *Server) PingSession(conn net.Conn) error {
