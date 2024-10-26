@@ -76,12 +76,12 @@ func ReadVarIntN(in []byte) (VarInt, int, error) {
 	return VarInt(res), n, nil
 }
 
-func BinaryReadVarInt(in io.ByteReader) (VarInt, error) {
+func BinaryReadVarInt(in io.ByteReader) (int, error) {
 	pl, err := binary.ReadUvarint(in)
 	if err != nil {
 		return 0, err
 	}
-	return VarInt(pl), nil
+	return int(pl), nil
 }
 
 func BinaryWriteVarInt(v int) []byte {

@@ -71,7 +71,7 @@ func ReadStringReader(in io.ByteReader) String {
 		data = append(data, b)
 	}
 	return String{
-		Size: l,
+		Size: VarInt(l),
 		Data: string(data),
 	}
 }

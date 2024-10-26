@@ -3,6 +3,7 @@ package datatypes
 import (
 	"encoding/binary"
 	"errors"
+	"io"
 )
 
 type Short int16
@@ -21,6 +22,16 @@ func ReadShort(v []byte) Short {
 }
 
 type UShort uint16
+
+func (v *UShort) Read(r io.Reader) error {
+	b := make([]byte, 2)
+	_, err := r.Read(b)
+	if err != nil {
+		return err
+	}
+	*v = UShort(binary.BigEndian.Uint16(b))
+	return nil
+}
 
 func WriteUShort(v UShort) []byte {
 	res := make([]byte, 2)

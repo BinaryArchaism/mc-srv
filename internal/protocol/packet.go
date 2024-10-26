@@ -20,76 +20,53 @@ func NewPacketWorker() *PacketWorker {
 	}
 }
 
-//func (pw *PacketWorker) WritePacketTo(conn io.Writer, packet bytes.Buffer) error {
-//	buf := pw.bytesPool.Get()
-//	_, err := buf.ReadFrom(packet)
-//	if err != nil {
-//		return err
-//	}
-//	b := make([]byte, 5)
-//	_, err = conn.Write(b[:binary.PutUvarint(b, uint64(buf.Len()))])
-//	if err != nil {
-//		return err
-//	}
-//	_, err = buf.WriteTo(conn)
-//	if err != nil {
-//		return err
-//	}
-//
-//	return nil
-//}
-
 type HandshakePacket struct {
-	Length datatypes.VarInt
-	ID     datatypes.VarInt
+	Length int
+	ID     int
 
-	ProtocolVersion datatypes.VarInt
+	ProtocolVersion int
 	ServerAddress   datatypes.String
 	ServerPort      datatypes.UShort
-	NextState       datatypes.VarInt
+	NextState       int
 }
 
-func (p *HandshakePacket) ReadCustom(r io.Reader) error {
-	packetBytes := make([]byte, 32)
-	_, err := r.Read(packetBytes)
+func (p *HandshakePacket) Read(r io.Reader) error {
+	b := Pool.Get()
+	defer Pool.Put(b)
+
+	_, err := r.Read(b)
 	if err != nil {
 		return err
 	}
 
-	packetLen, l, err := datatypes.ReadVarIntN(packetBytes)
+	buf := bytes.NewBuffer(b)
+
+	p.Length, err = datatypes.BinaryReadVarInt(buf)
 	if err != nil {
 		return err
 	}
-	p.Length = packetLen
-	packetBytes = packetBytes[l:]
 
-	packetID, l, err := datatypes.ReadVarIntN(packetBytes)
+	p.ID, err = datatypes.BinaryReadVarInt(buf)
 	if err != nil {
 		return err
 	}
-	p.ID = packetID
-	packetBytes = packetBytes[l:]
 
-	protocolVersion, l, err := datatypes.ReadVarIntN(packetBytes)
+	p.ProtocolVersion, err = datatypes.BinaryReadVarInt(buf)
 	if err != nil {
 		return err
 	}
-	p.ProtocolVersion = protocolVersion
-	packetBytes = packetBytes[l:]
 
-	serverAddress, l := datatypes.ReadStringN(packetBytes)
-	p.ServerAddress = serverAddress
-	packetBytes = packetBytes[l:]
+	p.ServerAddress = datatypes.ReadStringReader(buf)
 
-	serverPort := datatypes.ReadUShort(packetBytes[:2])
-	p.ServerPort = serverPort
-	packetBytes = packetBytes[2:]
-
-	nextState, l, err := datatypes.ReadVarIntN(packetBytes)
+	err = p.ServerPort.Read(buf)
 	if err != nil {
 		return err
 	}
-	p.NextState = nextState
+
+	p.NextState, err = datatypes.BinaryReadVarInt(buf)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -282,6 +259,29 @@ type Packet struct {
 	ID     int
 }
 
+func Read(r io.Reader) (Packet, error) {
+	poolBytes := Pool.Get()
+	defer Pool.Put(poolBytes)
+
+	_, err := r.Read(poolBytes)
+	if err != nil {
+		return Packet{}, err
+	}
+
+	buf := bytes.NewBuffer(poolBytes)
+
+	packetLen, err := datatypes.BinaryReadVarInt(buf)
+	if err != nil {
+		return Packet{}, err
+	}
+	packetID, err := datatypes.BinaryReadVarInt(buf)
+	if err != nil {
+		return Packet{}, err
+	}
+
+	return Packet{packetLen, packetID}, nil
+}
+
 type LoginSuccessPacket struct {
 	Packet
 
@@ -355,8 +355,10 @@ func (p *ClientboundKnownPacksPacket) Write(w io.Writer) error {
 		return errors.New("invalid number of props")
 	}
 
-	buf := Pool.Get()
-	defer Pool.Put(buf)
+	poolBytes := Pool.Get()
+	defer Pool.Put(poolBytes)
+
+	buf := bytes.NewBuffer(poolBytes)
 	buf.Reset()
 
 	p.Packet.ID = 0x0E
@@ -388,12 +390,14 @@ func (p *ClientboundKnownPacksPacket) Write(w io.Writer) error {
 }
 
 func (p *ClientboundKnownPacksPacket) Read(r io.Reader) error {
-	b := make([]byte, 1024)
-	_, err := r.Read(b)
+	poolBytes := Pool.Get()
+	defer Pool.Put(poolBytes)
+
+	_, err := r.Read(poolBytes)
 	if err != nil {
 		return err
 	}
-	buf := bytes.NewBuffer(b)
+	buf := bytes.NewBuffer(poolBytes[:])
 
 	packetLen, err := datatypes.BinaryReadVarInt(buf)
 	if err != nil {
@@ -423,6 +427,40 @@ func (p *ClientboundKnownPacksPacket) Read(r io.Reader) error {
 
 	p.KnownPacketCount = int(knownPackCount)
 	p.KnownPacket = knownPacks
+
+	return nil
+}
+
+type LoginPlugin struct {
+	Packet
+
+	MessageID  int
+	Successful datatypes.Boolean
+	Data       []byte
+}
+
+func (p *LoginPlugin) Read(r io.Reader) error {
+	poolBytes := Pool.Get()
+	defer Pool.Put(poolBytes)
+	_, err := r.Read(poolBytes)
+	if err != nil {
+		return err
+	}
+	buf := bytes.NewBuffer(poolBytes)
+
+	p.Packet.Length, err = datatypes.BinaryReadVarInt(buf)
+	if err != nil {
+		return err
+	}
+	p.Packet.ID, err = datatypes.BinaryReadVarInt(buf)
+	if err != nil {
+		return err
+	}
+	p.MessageID, err = datatypes.BinaryReadVarInt(buf)
+	if err != nil {
+		return err
+	}
+	p.Data = buf.Bytes()[:p.Length-2]
 
 	return nil
 }

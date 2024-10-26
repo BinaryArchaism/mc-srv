@@ -68,7 +68,7 @@ func (s *Server) HandleConnection(conn net.Conn) {
 	log.Trace().Msgf("Client connected: %s", conn.RemoteAddr().String())
 
 	var hsPacket protocol.HandshakePacket
-	err := hsPacket.ReadCustom(conn)
+	err := hsPacket.Read(conn)
 	if err != nil {
 		log.Err(err).Msg("Error reading handshake packet")
 		return
@@ -129,11 +129,29 @@ func (s *Server) LoginSession(conn net.Conn) error {
 		return err
 	}
 	log.Trace().Any("clientKnownPack packet send", nil).Msg("clientbound")
+	//
+	//var logPlug protocol.LoginPlugin
+	//err = logPlug.Read(conn)
+	//if err != nil {
+	//	return err
+	//}
 
-	err = cli.Read(conn)
+	b, err = readAll(conn)
 	if err != nil {
 		return err
 	}
+	log.Trace().Bytes("clientKnownPack end", b).Msg("serverbound")
+
+	_, err = conn.Write([]byte{0x01, 0x03})
+	if err != nil {
+		return err
+	}
+
+	b, err = readAll(conn)
+	if err != nil {
+		return err
+	}
+	log.Trace().Bytes("configuration end", b).Msg("serverbound")
 
 	return nil
 }

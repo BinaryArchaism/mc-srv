@@ -1,7 +1,6 @@
 package protocol
 
 import (
-	"bytes"
 	"sync"
 )
 
@@ -16,7 +15,7 @@ type BytesPool struct {
 func NewBytesPool() *BytesPool {
 	pool := sync.Pool{
 		New: func() interface{} {
-			return bytes.NewBuffer(make([]byte, 10*1024)) // 10KB
+			return make([]byte, 10*1024) // 10KB
 		},
 	}
 	for i := 0; i < 10; i++ {
@@ -27,11 +26,10 @@ func NewBytesPool() *BytesPool {
 	}
 }
 
-func (bp *BytesPool) Get() *bytes.Buffer {
-	return bp.pool.Get().(*bytes.Buffer)
+func (bp *BytesPool) Get() []byte {
+	return bp.pool.Get().([]byte)
 }
 
-func (bp *BytesPool) Put(b *bytes.Buffer) {
-	b.Reset()
+func (bp *BytesPool) Put(b []byte) {
 	bp.pool.Put(b)
 }
