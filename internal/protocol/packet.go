@@ -11,13 +11,10 @@ import (
 )
 
 type PacketWorker struct {
-	bytesPool *BytesPool
 }
 
 func NewPacketWorker() *PacketWorker {
-	return &PacketWorker{
-		bytesPool: NewBytesPool(),
-	}
+	return &PacketWorker{}
 }
 
 type HandshakePacket struct {
@@ -30,7 +27,7 @@ type HandshakePacket struct {
 }
 
 func (p *HandshakePacket) Read(r io.Reader) error {
-	b := Pool.Get()
+	b := Pool.GetN(1024)
 	defer Pool.Put(b)
 
 	_, err := r.Read(b)
@@ -259,10 +256,10 @@ type Packet struct {
 }
 
 func (p *Packet) Read(r io.Reader) error {
-	poolBytes := Pool.Get()
+	poolBytes := Pool.GetN(SmallObjectSize)
 	defer Pool.Put(poolBytes)
 
-	_, err := r.Read(poolBytes)
+	_, err := r.Read(poolBytes[:cap(poolBytes)])
 	if err != nil {
 		return err
 	}
@@ -282,7 +279,7 @@ func (p *Packet) Read(r io.Reader) error {
 }
 
 func (p *Packet) Write(w io.Writer) error {
-	poolBytes := Pool.Get()
+	poolBytes := Pool.GetN(SmallObjectSize)
 	defer Pool.Put(poolBytes)
 
 	buf := bytes.NewBuffer(poolBytes)
@@ -301,6 +298,64 @@ func (p *Packet) Write(w io.Writer) error {
 	if err != nil {
 		return err
 	}
+	return nil
+}
+
+type PacketWithData struct {
+	Packet
+	Data []byte
+}
+
+func (p *PacketWithData) Read(r io.Reader) error {
+	poolBytes := Pool.GetN(SmallObjectSize)
+	defer Pool.Put(poolBytes)
+
+	_, err := r.Read(poolBytes[:cap(poolBytes)])
+	if err != nil {
+		return err
+	}
+
+	buf := bytes.NewBuffer(poolBytes)
+
+	p.Length, err = datatypes.BinaryReadVarInt(buf)
+	if err != nil {
+		return err
+	}
+	p.ID, err = datatypes.BinaryReadVarInt(buf)
+	if err != nil {
+		return err
+	}
+
+	p.Data = poolBytes[:p.Length-1]
+	return nil
+}
+
+func (p *PacketWithData) Write(w io.Writer) error {
+	poolBytes := Pool.GetN(SmallObjectSize)
+	defer Pool.Put(poolBytes)
+
+	buf := bytes.NewBuffer(poolBytes)
+	buf.Reset()
+
+	_, err := buf.Write(datatypes.BinaryWriteVarInt(p.Length))
+	if err != nil {
+		return err
+	}
+	_, err = buf.Write(datatypes.BinaryWriteVarInt(p.ID))
+	if err != nil {
+		return err
+	}
+
+	_, err = buf.Write(p.Data)
+	if err != nil {
+		return err
+	}
+
+	_, err = buf.WriteTo(w)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -377,7 +432,7 @@ func (p *ClientboundKnownPacksPacket) Write(w io.Writer) error {
 		return errors.New("invalid number of props")
 	}
 
-	poolBytes := Pool.Get()
+	poolBytes := Pool.GetN(SmallObjectSize)
 	defer Pool.Put(poolBytes)
 
 	buf := bytes.NewBuffer(poolBytes)
@@ -412,7 +467,7 @@ func (p *ClientboundKnownPacksPacket) Write(w io.Writer) error {
 }
 
 func (p *ClientboundKnownPacksPacket) Read(r io.Reader) error {
-	poolBytes := Pool.Get()
+	poolBytes := Pool.GetN(SmallObjectSize)
 	defer Pool.Put(poolBytes)
 
 	_, err := r.Read(poolBytes)
@@ -462,7 +517,7 @@ type LoginPlugin struct {
 }
 
 func (p *LoginPlugin) Read(r io.Reader) error {
-	poolBytes := Pool.Get()
+	poolBytes := Pool.GetN(SmallObjectSize)
 	defer Pool.Put(poolBytes)
 	_, err := r.Read(poolBytes)
 	if err != nil {

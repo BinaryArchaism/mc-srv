@@ -70,16 +70,15 @@ func (s *Session) ProcessPingPongSession() error {
 		return fmt.Errorf("failed to write statusResponse packet: %w", err)
 	}
 
-	var pingRequest protocol.Packet
-	err = pingRequest.Read(s.UserConn)
+	var pingPongPacket protocol.PacketWithData
+	err = pingPongPacket.Read(s.UserConn)
 	if err != nil {
-		return fmt.Errorf("failed to read pingRequest packet: %w", err)
+		return fmt.Errorf("failed to read pingPongPacket packet: %w", err)
 	}
 
-	var pongResponse protocol.Packet
-	err = pongResponse.Write(s.UserConn)
+	err = pingPongPacket.Write(s.UserConn)
 	if err != nil {
-		return fmt.Errorf("failed to write pongResponse packet: %w", err)
+		return fmt.Errorf("failed to write pingPongPacket packet: %w", err)
 	}
 
 	return nil
