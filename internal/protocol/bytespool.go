@@ -16,7 +16,8 @@ const (
 var Pool = NewBytesPool()
 
 type BytesPool struct {
-	buckets [poolBucketCount]*bucket
+	buckets   [poolBucketCount]*bucket
+	allocated atomic.Int32
 }
 
 func NewBytesPool() *BytesPool {
@@ -29,11 +30,13 @@ func NewBytesPool() *BytesPool {
 	}
 }
 
+// Stats return map[poolSize]inUseObjects, poolSize = -1 shows all allocation outside of pools
 func (bp *BytesPool) Stats() map[int]int32 {
-	m := make(map[int]int32, poolBucketCount)
+	m := make(map[int]int32, poolBucketCount+1)
 	for _, v := range bp.buckets {
 		m[v.size] = v.inUse.Load()
 	}
+	m[-1] = bp.allocated.Load()
 	return m
 }
 
@@ -45,6 +48,7 @@ func (bp *BytesPool) GetN(size int) []byte {
 			return v.Get()
 		}
 	}
+	bp.allocated.Add(1)
 	return make([]byte, size)
 }
 

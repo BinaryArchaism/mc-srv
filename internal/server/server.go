@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"github.com/BinaryArchaism/mc-srv/internal/datatypes"
 	"github.com/BinaryArchaism/mc-srv/internal/protocol"
@@ -97,11 +96,6 @@ func (s *Server) HandleConnection(conn net.Conn) {
 
 	switch hsPacket.NextState {
 	case statusState:
-		err = s.PingSession(conn)
-		if err != nil {
-			log.Err(err).Msg("Error while ping session")
-			return
-		}
 	case loginStatus:
 		err = s.LoginSession(conn)
 		if err != nil {
@@ -172,38 +166,6 @@ func (s *Server) LoginSession(conn net.Conn) error {
 		return err
 	}
 	log.Trace().Bytes("configuration end", b).Msg("serverbound")
-
-	return nil
-}
-
-func (s *Server) PingSession(conn net.Conn) error {
-	b, err := readAll(conn)
-	if err != nil {
-		return fmt.Errorf("error reading status request: %w", err)
-	}
-	log.Trace().Bytes("status request packet", b).Msg("serverbound")
-
-	var statusResponse protocol.StatusResponsePacket
-	err = statusResponse.Write(conn)
-	if err != nil {
-		return fmt.Errorf("error writing status response: %w", err)
-	}
-	log.Trace().Any("status response packet", statusResponse).Msg("clientbound")
-
-	b, err = readAll(conn)
-	if err != nil {
-		return fmt.Errorf("error reading ping request: %w", err)
-	}
-	if len(b) == 0 {
-		return errors.New("ping request is empty")
-	}
-	log.Trace().Bytes("ping request packet", b).Msg("serverbound")
-
-	_, err = conn.Write(b)
-	if err != nil {
-		return fmt.Errorf("error writing pong response: %w", err)
-	}
-	log.Trace().Bytes("pong response packet", b).Msg("clientbound")
 
 	return nil
 }
