@@ -1,11 +1,16 @@
 package server
 
 import (
+	"errors"
 	"fmt"
 	"github.com/BinaryArchaism/mc-srv/internal/protocol"
 	"github.com/rs/zerolog/log"
 	"io"
 	"net"
+)
+
+var (
+	ErrInvalidNextState = errors.New("invalid next state")
 )
 
 type State string
@@ -53,6 +58,8 @@ func (s *Session) Execute() error {
 	case loginStatus:
 		s.State = Login
 
+	default:
+		return ErrInvalidNextState
 	}
 	return nil
 }
