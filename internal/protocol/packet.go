@@ -5,19 +5,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"fmt"
+	"github.com/BinaryArchaism/mc-srv/internal/countingbuffer"
 	"github.com/BinaryArchaism/mc-srv/internal/datatypes"
 	"github.com/google/uuid"
 	"io"
 	"os"
 )
-
-type PacketWorker struct {
-}
-
-func NewPacketWorker() *PacketWorker {
-	return &PacketWorker{}
-}
 
 type HandshakePacket struct {
 	Packet
@@ -29,7 +22,7 @@ type HandshakePacket struct {
 }
 
 func (p *HandshakePacket) Read(r io.Reader) error {
-	b := Pool.GetN(1024)
+	b := Pool.GetN(SmallObjectSize)
 	defer Pool.Put(b)
 
 	_, err := r.Read(b)
@@ -67,28 +60,6 @@ func (p *HandshakePacket) Read(r io.Reader) error {
 	}
 
 	return nil
-}
-
-func ReadPacket(r io.Reader) (p []byte, err error) {
-	lengthBytes := make([]byte, 3)
-	_, err = r.Read(lengthBytes)
-	if err != nil {
-		return nil, err
-	}
-	packetLen, l, err := datatypes.ReadVarIntN(lengthBytes)
-	if err != nil {
-		return nil, err
-	}
-	res := make([]byte, 0, 3-l+int(packetLen))
-	if 3-l != 0 {
-		res = append(res, lengthBytes[l:]...)
-	}
-	_, err = r.Read(res[len(res):packetLen])
-	if err != nil {
-		return nil, err
-	}
-	res = res[:packetLen]
-	return res, nil
 }
 
 type StatusResponsePacket struct {
@@ -180,41 +151,38 @@ func (p *StatusResponsePacket) Write(w io.Writer) error {
 }
 
 type LoginPacket struct {
-	Length int32
-	ID     int32
+	Packet
 
 	Name       datatypes.String
 	PlayerUUID uuid.UUID
 }
 
 func (p *LoginPacket) Read(r io.Reader) error {
-	packetBytes := make([]byte, 32)
-	_, err := r.Read(packetBytes)
-	if err != nil {
-		return err
-	}
-	buf := bytes.NewBuffer(packetBytes)
-	packetLen, err := datatypes.BinaryReadVarInt(buf)
-	if err != nil {
-		return err
-	}
-	p.Length = int32(packetLen)
+	poolBytes := Pool.GetN(SmallObjectSize)
+	defer Pool.Put(poolBytes)
 
-	packetID, err := datatypes.BinaryReadVarInt(buf)
+	_, err := r.Read(poolBytes[:cap(poolBytes)])
 	if err != nil {
 		return err
 	}
-	p.ID = int32(packetID)
+	buf := bytes.NewBuffer(poolBytes)
 
-	name := datatypes.ReadStringReader(buf)
-	p.Name = name
-
-	var playerID uuid.UUID
-	_, err = buf.Read(playerID[0:])
+	p.Length, err = datatypes.BinaryReadVarInt(buf)
 	if err != nil {
 		return err
 	}
-	p.PlayerUUID = playerID
+
+	p.ID, err = datatypes.BinaryReadVarInt(buf)
+	if err != nil {
+		return err
+	}
+
+	p.Name = datatypes.ReadStringReader(buf)
+
+	_, err = buf.Read(p.PlayerUUID[:])
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -388,9 +356,14 @@ func (p *LoginSuccessPacket) Write(w io.Writer) error {
 		return errors.New("invalid number of props")
 	}
 
+	poolBytes := Pool.GetN(SmallObjectSize)
+	defer Pool.Put(poolBytes)
+
+	buf := bytes.NewBuffer(poolBytes)
+	buf.Reset()
+
 	p.ID = 0x02
 
-	buf := bytes.NewBuffer(make([]byte, 0, 1024))
 	buf.Write(datatypes.WriteVarInt(datatypes.VarInt(p.ID)))
 	buf.Write(p.UUID[:])
 	buf.Write(datatypes.WriteString(p.UserName))
@@ -412,11 +385,10 @@ func (p *LoginSuccessPacket) Write(w io.Writer) error {
 	resBuf.Write(datatypes.WriteVarInt(datatypes.VarInt(p.Length)))
 	resBuf.Write(buf.Bytes())
 
-	to, err := resBuf.WriteTo(w)
+	_, err := resBuf.WriteTo(w)
 	if err != nil {
 		return err
 	}
-	fmt.Println(to, p.Length)
 
 	return nil
 }
@@ -546,5 +518,69 @@ func (p *LoginPlugin) Read(r io.Reader) error {
 	}
 	p.Data = buf.Bytes()[:p.Length-2]
 
+	return nil
+}
+
+type ServerboundPluginPacket struct {
+	Packet
+
+	Channel datatypes.String
+	Data    []byte
+}
+
+func (p *ServerboundPluginPacket) Read(r io.Reader) error {
+	poolBytes := Pool.GetN(SmallObjectSize)
+	defer Pool.Put(poolBytes)
+
+	b := make([]byte, 1024)
+	n, err := r.Read(b)
+	if err != nil {
+		return err
+	}
+
+	buf := countingbuffer.New(poolBytes)
+
+	p.Packet.Length, err = datatypes.BinaryReadVarInt(buf)
+	if err != nil {
+		return err
+	}
+
+	p.Packet.ID, err = datatypes.BinaryReadVarInt(buf)
+	if err != nil {
+		return err
+	}
+
+	p.Channel = datatypes.ReadStringReader(buf)
+	p.Data = buf.Bytes()[:n-buf.ReadCount()]
+	return nil
+}
+
+func (p *ServerboundPluginPacket) Write(w io.Writer) error {
+	poolBytes := Pool.GetN(SmallObjectSize)
+	defer Pool.Put(poolBytes)
+
+	buf := countingbuffer.New(poolBytes)
+	buf.Reset()
+
+	p.ID = 0x01
+
+	_, err := buf.Write(datatypes.BinaryWriteVarInt(p.ID))
+	if err != nil {
+		return err
+	}
+	_, err = buf.Write(datatypes.WriteString(p.Channel))
+	if err != nil {
+		return err
+	}
+
+	_, err = w.Write(datatypes.BinaryWriteVarInt(buf.WriteCount()))
+	if err != nil {
+		return err
+	}
+
+	_, err = buf.WriteTo(w)
+	if err != nil {
+		return err
+	}
 	return nil
 }

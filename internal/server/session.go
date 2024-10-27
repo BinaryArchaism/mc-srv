@@ -11,6 +11,7 @@ import (
 
 var (
 	ErrInvalidNextState = errors.New("invalid next state")
+	ErrFailedLogin      = errors.New("failed login")
 )
 
 type State string
@@ -57,6 +58,17 @@ func (s *Session) Execute() error {
 
 	case loginStatus:
 		s.State = Login
+		err := s.LoginSession()
+		if err != nil {
+			log.Err(err).Msg("failed to login")
+			return err
+		}
+		s.State = Configuration
+		err = s.ConfigurationSession()
+		if err != nil {
+			log.Err(err).Msg("failed to configuration")
+			return err
+		}
 
 	default:
 		return ErrInvalidNextState
@@ -86,6 +98,60 @@ func (s *Session) ProcessPingPongSession() error {
 	err = pingPongPacket.Write(s.UserConn)
 	if err != nil {
 		return fmt.Errorf("failed to write pingPongPacket packet: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Session) LoginSession() error {
+	var loginPacket protocol.LoginPacket
+	err := loginPacket.Read(s.UserConn)
+	if err != nil {
+		return fmt.Errorf("failed to read loginPacket packet: %w", err)
+	}
+
+	// TODO encryption
+	// encryption skipped
+
+	// TODO set compression
+	// compression skipped
+
+	// TODO check player availability to login
+	// player wont be disconnected
+
+	loginSuccess := protocol.LoginSuccessPacket{
+		UUID:     loginPacket.PlayerUUID,
+		UserName: loginPacket.Name,
+	}
+	err = loginSuccess.Write(s.UserConn)
+	if err != nil {
+		return fmt.Errorf("failed to write loginSuccess packet: %w", err)
+	}
+
+	const loginProtocolID = 3
+	var loginAck protocol.Packet
+	err = loginAck.Read(s.UserConn)
+	if err != nil {
+		return fmt.Errorf("failed to read loginAck packet: %w", err)
+	}
+
+	if loginAck.ID != loginProtocolID {
+		return ErrFailedLogin
+	}
+
+	return nil
+}
+
+func (s *Session) ConfigurationSession() error {
+	var serverboundPligin protocol.ServerboundPluginPacket
+	err := serverboundPligin.Read(s.UserConn)
+	if err != nil {
+		return fmt.Errorf("failed to read serverboundPligin packet: %w", err)
+	}
+
+	err = serverboundPligin.Write(s.UserConn)
+	if err != nil {
+		return fmt.Errorf("failed to write serverboundPligin packet: %w", err)
 	}
 
 	return nil
