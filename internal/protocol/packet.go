@@ -810,3 +810,30 @@ func (p *KnownPacksPacket) Read(r io.Reader) error {
 
 	return nil
 }
+
+type LoginPlayPacket struct {
+	Packet
+
+	EntityID            int32
+	IsHardcore          datatypes.Boolean
+	DimensionCount      datatypes.VarInt
+	DimensionNames      []datatypes.String
+	MaxPlayers          datatypes.VarInt
+	ViewDistance        datatypes.VarInt
+	SimulationDistance  datatypes.VarInt
+	ReducedDebugInfo    datatypes.Boolean
+	EnableRespawnScreen datatypes.Boolean
+	DoLimitedCrafting   datatypes.Boolean
+	DimensionType       datatypes.VarInt
+	DimensionName       datatypes.String
+	HashedSeed          int64
+	GameMode            byte
+	PreviousGameMode    byte
+	IsDebug             datatypes.Boolean
+	IsFlat              datatypes.Boolean
+	HasDeathLocation    datatypes.Boolean
+	DeathDimensionName  datatypes.String
+	DeathLocation       datatypes.Position
+	PortalCooldown      datatypes.VarInt
+	EnforcesSecureChat  datatypes.Boolean
+}
