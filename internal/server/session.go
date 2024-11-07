@@ -70,6 +70,12 @@ func (s *Session) Execute() error {
 			log.Err(err).Msg("failed to configuration")
 			return err
 		}
+		s.State = Play
+		err = s.PlaySession()
+		if err != nil {
+			log.Err(err).Msg("failed to play")
+			return err
+		}
 
 	default:
 		return ErrInvalidNextState
@@ -172,11 +178,49 @@ func (s *Session) ConfigurationSession() error {
 		return fmt.Errorf("failed to write featureFlag packet: %w", err)
 	}
 
-	all, err := readAll(s.UserConn)
-	if err != nil {
-		return fmt.Errorf("failed to read all: %w", err)
+	clientBoundKnownPacksPacket := protocol.KnownPacksPacket{
+		KnownPackCount: 1,
+		KnownPacks: []protocol.KnownPacks{
+			{
+				Namespace: datatypes.FromString("minecraft:core"),
+				ID:        datatypes.FromString("0"),
+				Version:   datatypes.FromString("1.21"),
+			},
+		},
 	}
-	fmt.Println(all)
+	err = clientBoundKnownPacksPacket.Write(s.UserConn)
+	if err != nil {
+		return fmt.Errorf("failed to write clientBoundKnownPacksPacket: %w", err)
+	}
+
+	var serverBoundKnownPacksPacket protocol.KnownPacksPacket
+	err = serverBoundKnownPacksPacket.Read(s.UserConn)
+	if err != nil {
+		return fmt.Errorf("failed to read serverBoundKnownPacksPacket: %w", err)
+	}
+
+	// TODO registry data
+	// TODO update tags
+
+	finishCfgPacket := protocol.Packet{
+		Length: 0x01,
+		ID:     0x03,
+	}
+	err = finishCfgPacket.Write(s.UserConn)
+	if err != nil {
+		return fmt.Errorf("failed to write finishCfgPacker packet: %w", err)
+	}
+
+	var clientAckFinishCfgPacket protocol.Packet
+	err = clientAckFinishCfgPacket.Read(s.UserConn)
+	if err != nil {
+		return fmt.Errorf("failed to read clientAckFinishCfgPacket: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Session) PlaySession() error {
 
 	return nil
 }

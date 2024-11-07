@@ -5,11 +5,13 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/BinaryArchaism/mc-srv/internal/countingbuffer"
 	"github.com/BinaryArchaism/mc-srv/internal/datatypes"
 	"github.com/google/uuid"
 	"io"
 	"os"
+	"unsafe"
 )
 
 type HandshakePacket struct {
@@ -669,7 +671,7 @@ type FeatureFlagPacket struct {
 
 func (p *FeatureFlagPacket) Write(w io.Writer) error {
 	if p.TotalFeatures != len(p.FeatureFlags) {
-		return errors.New("invalid number of props")
+		return errors.New("invalid number of FeatureFlags")
 	}
 
 	poolBytes := Pool.GetN(SmallObjectSize)
@@ -705,5 +707,106 @@ func (p *FeatureFlagPacket) Write(w io.Writer) error {
 	if err != nil {
 		return err
 	}
+	return nil
+}
+
+type KnownPacksPacket struct {
+	Packet
+
+	KnownPackCount int
+	KnownPacks     []KnownPacks
+}
+
+type KnownPacks struct {
+	Namespace datatypes.String
+	ID        datatypes.String
+	Version   datatypes.String
+}
+
+func (p *KnownPacksPacket) Write(w io.Writer) error {
+	if p.KnownPackCount != len(p.KnownPacks) {
+		return errors.New("invalid number of KnownPacks")
+	}
+
+	poolBytes := Pool.GetN(SmallObjectSize)
+	defer Pool.Put(poolBytes)
+
+	fmt.Println(unsafe.Pointer(&poolBytes[0]))
+
+	buf := countingbuffer.New(poolBytes)
+	buf.Reset()
+
+	p.ID = 0x0E
+
+	_, err := buf.Write(datatypes.BinaryWriteVarInt(p.ID))
+	if err != nil {
+		return err
+	}
+	_, err = buf.Write(datatypes.BinaryWriteVarInt(p.KnownPackCount))
+	if err != nil {
+		return err
+	}
+
+	for _, kp := range p.KnownPacks {
+		_, err = buf.Write(datatypes.WriteString(kp.Namespace))
+		if err != nil {
+			return err
+		}
+		_, err = buf.Write(datatypes.WriteString(kp.ID))
+		if err != nil {
+			return err
+		}
+		_, err = buf.Write(datatypes.WriteString(kp.Version))
+		if err != nil {
+			return err
+		}
+	}
+
+	_, err = w.Write(datatypes.BinaryWriteVarInt(buf.WriteCount()))
+	if err != nil {
+		return err
+	}
+
+	_, err = buf.WriteTo(w)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (p *KnownPacksPacket) Read(r io.Reader) error {
+	poolBytes := Pool.GetN(SmallObjectSize)
+	defer Pool.Put(poolBytes)
+
+	_, err := r.Read(poolBytes[:cap(poolBytes)])
+	if err != nil {
+		return err
+	}
+
+	buf := countingbuffer.New(poolBytes)
+
+	p.Packet.Length, err = datatypes.BinaryReadVarInt(buf)
+	if err != nil {
+		return err
+	}
+
+	p.Packet.ID, err = datatypes.BinaryReadVarInt(buf)
+	if err != nil {
+		return err
+	}
+
+	p.KnownPackCount, err = datatypes.BinaryReadVarInt(buf)
+	if err != nil {
+		return err
+	}
+
+	for range p.KnownPackCount {
+		p.KnownPacks = append(p.KnownPacks, KnownPacks{
+			Namespace: datatypes.ReadStringReader(buf),
+			ID:        datatypes.ReadStringReader(buf),
+			Version:   datatypes.ReadStringReader(buf),
+		})
+	}
+
 	return nil
 }
