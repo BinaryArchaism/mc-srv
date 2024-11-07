@@ -3,6 +3,7 @@ package server
 import (
 	"errors"
 	"fmt"
+	"github.com/BinaryArchaism/mc-srv/internal/datatypes"
 	"github.com/BinaryArchaism/mc-srv/internal/protocol"
 	"github.com/rs/zerolog/log"
 	"io"
@@ -143,16 +144,39 @@ func (s *Session) LoginSession() error {
 }
 
 func (s *Session) ConfigurationSession() error {
-	var serverboundPligin protocol.ServerboundPluginPacket
-	err := serverboundPligin.Read(s.UserConn)
+	var serverBoundPlugin protocol.ServerboundPluginPacket
+	err := serverBoundPlugin.Read(s.UserConn)
 	if err != nil {
 		return fmt.Errorf("failed to read serverboundPligin packet: %w", err)
 	}
 
-	err = serverboundPligin.Write(s.UserConn)
+	serverBoundPlugin.Data = nil
+	serverBoundPlugin.Channel = datatypes.FromString("")
+	err = serverBoundPlugin.Write(s.UserConn)
 	if err != nil {
 		return fmt.Errorf("failed to write serverboundPligin packet: %w", err)
 	}
+
+	var clientInfo protocol.ClientInformationPacket
+	err = clientInfo.Read(s.UserConn)
+	if err != nil {
+		return fmt.Errorf("failed to read clientInfo packet: %w", err)
+	}
+
+	featureFlag := protocol.FeatureFlagPacket{
+		TotalFeatures: 0,
+		FeatureFlags:  nil,
+	}
+	err = featureFlag.Write(s.UserConn)
+	if err != nil {
+		return fmt.Errorf("failed to write featureFlag packet: %w", err)
+	}
+
+	all, err := readAll(s.UserConn)
+	if err != nil {
+		return fmt.Errorf("failed to read all: %w", err)
+	}
+	fmt.Println(all)
 
 	return nil
 }

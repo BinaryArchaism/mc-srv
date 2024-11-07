@@ -532,8 +532,7 @@ func (p *ServerboundPluginPacket) Read(r io.Reader) error {
 	poolBytes := Pool.GetN(SmallObjectSize)
 	defer Pool.Put(poolBytes)
 
-	b := make([]byte, 1024)
-	n, err := r.Read(b)
+	n, err := r.Read(poolBytes[:cap(poolBytes)])
 	if err != nil {
 		return err
 	}
@@ -571,6 +570,130 @@ func (p *ServerboundPluginPacket) Write(w io.Writer) error {
 	_, err = buf.Write(datatypes.WriteString(p.Channel))
 	if err != nil {
 		return err
+	}
+
+	_, err = w.Write(datatypes.BinaryWriteVarInt(buf.WriteCount()))
+	if err != nil {
+		return err
+	}
+
+	_, err = buf.WriteTo(w)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+type ClientInformationPacket struct {
+	Packet
+
+	Locale              datatypes.String
+	ViewDistance        byte
+	ChatMode            int
+	ChatColors          datatypes.Boolean
+	DisplayedSkinParts  byte
+	MainHand            int
+	EnableTextFiltering datatypes.Boolean
+	AllowServerListings datatypes.Boolean
+}
+
+func (p *ClientInformationPacket) Read(r io.Reader) error {
+	poolBytes := Pool.GetN(SmallObjectSize)
+	defer Pool.Put(poolBytes)
+
+	_, err := r.Read(poolBytes[:cap(poolBytes)])
+	if err != nil {
+		return err
+	}
+
+	buf := countingbuffer.New(poolBytes)
+
+	p.Packet.Length, err = datatypes.BinaryReadVarInt(buf)
+	if err != nil {
+		return err
+	}
+
+	p.Packet.ID, err = datatypes.BinaryReadVarInt(buf)
+	if err != nil {
+		return err
+	}
+
+	p.Locale = datatypes.ReadStringReader(buf)
+	p.ViewDistance, err = buf.ReadByte()
+	if err != nil {
+		return err
+	}
+
+	p.ChatMode, err = datatypes.BinaryReadVarInt(buf)
+	if err != nil {
+		return err
+	}
+
+	chatColors, err := buf.ReadByte()
+	if err != nil {
+		return err
+	}
+	p.ChatColors = datatypes.ReadBoolean(chatColors)
+
+	p.DisplayedSkinParts, err = buf.ReadByte()
+	if err != nil {
+		return err
+	}
+
+	p.MainHand, err = datatypes.BinaryReadVarInt(buf)
+	if err != nil {
+		return err
+	}
+
+	enableTextFiltering, err := buf.ReadByte()
+	if err != nil {
+		return err
+	}
+	p.EnableTextFiltering = datatypes.ReadBoolean(enableTextFiltering)
+
+	allowServerListings, err := buf.ReadByte()
+	if err != nil {
+		return err
+	}
+	p.AllowServerListings = datatypes.ReadBoolean(allowServerListings)
+
+	return nil
+}
+
+type FeatureFlagPacket struct {
+	Packet
+
+	TotalFeatures int
+	FeatureFlags  []datatypes.String
+}
+
+func (p *FeatureFlagPacket) Write(w io.Writer) error {
+	if p.TotalFeatures != len(p.FeatureFlags) {
+		return errors.New("invalid number of props")
+	}
+
+	poolBytes := Pool.GetN(SmallObjectSize)
+	defer Pool.Put(poolBytes)
+
+	buf := countingbuffer.New(poolBytes)
+	buf.Reset()
+
+	p.ID = 0x0C
+
+	_, err := buf.Write(datatypes.BinaryWriteVarInt(p.ID))
+	if err != nil {
+		return err
+	}
+	_, err = buf.Write(datatypes.BinaryWriteVarInt(p.TotalFeatures))
+	if err != nil {
+		return err
+	}
+
+	for _, f := range p.FeatureFlags {
+		_, err = buf.Write(datatypes.WriteString(f))
+		if err != nil {
+			return err
+		}
 	}
 
 	_, err = w.Write(datatypes.BinaryWriteVarInt(buf.WriteCount()))
