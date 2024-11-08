@@ -3,15 +3,14 @@ package protocol
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/BinaryArchaism/mc-srv/internal/countingbuffer"
 	"github.com/BinaryArchaism/mc-srv/internal/datatypes"
 	"github.com/google/uuid"
 	"io"
 	"os"
-	"unsafe"
 )
 
 type HandshakePacket struct {
@@ -731,8 +730,6 @@ func (p *KnownPacksPacket) Write(w io.Writer) error {
 	poolBytes := Pool.GetN(SmallObjectSize)
 	defer Pool.Put(poolBytes)
 
-	fmt.Println(unsafe.Pointer(&poolBytes[0]))
-
 	buf := countingbuffer.New(poolBytes)
 	buf.Reset()
 
@@ -836,4 +833,135 @@ type LoginPlayPacket struct {
 	DeathLocation       datatypes.Position
 	PortalCooldown      datatypes.VarInt
 	EnforcesSecureChat  datatypes.Boolean
+}
+
+func (p *LoginPlayPacket) Write(w io.Writer) error {
+	if int(p.DimensionCount) != len(p.DimensionNames) {
+		return errors.New("invalid number of KnownPacks")
+	}
+
+	poolBytes := Pool.GetN(SmallObjectSize)
+	defer Pool.Put(poolBytes)
+
+	buf := countingbuffer.New(poolBytes)
+	buf.Reset()
+
+	p.ID = 0x2B
+
+	binary.BigEndian.PutUint32(buf.Next(4), uint32(p.EntityID))
+
+	err := buf.WriteByte(datatypes.WriteBoolean(p.IsHardcore))
+	if err != nil {
+		return err
+	}
+
+	_, err = buf.Write(datatypes.BinaryWriteVarInt(int(p.DimensionCount)))
+	if err != nil {
+		return err
+	}
+
+	for _, d := range p.DimensionNames {
+		_, err = buf.Write(datatypes.WriteString(d))
+		if err != nil {
+			return err
+		}
+	}
+
+	_, err = buf.Write(datatypes.BinaryWriteVarInt(int(p.MaxPlayers)))
+	if err != nil {
+		return err
+	}
+
+	_, err = buf.Write(datatypes.BinaryWriteVarInt(int(p.ViewDistance)))
+	if err != nil {
+		return err
+	}
+
+	_, err = buf.Write(datatypes.BinaryWriteVarInt(int(p.SimulationDistance)))
+	if err != nil {
+		return err
+	}
+
+	err = buf.WriteByte(datatypes.WriteBoolean(p.ReducedDebugInfo))
+	if err != nil {
+		return err
+	}
+
+	err = buf.WriteByte(datatypes.WriteBoolean(p.EnableRespawnScreen))
+	if err != nil {
+		return err
+	}
+
+	err = buf.WriteByte(datatypes.WriteBoolean(p.DoLimitedCrafting))
+	if err != nil {
+		return err
+	}
+
+	_, err = buf.Write(datatypes.BinaryWriteVarInt(int(p.DimensionType)))
+	if err != nil {
+		return err
+	}
+
+	_, err = buf.Write(datatypes.WriteString(p.DimensionName))
+	if err != nil {
+		return err
+	}
+
+	binary.BigEndian.PutUint64(buf.Next(8), uint64(p.HashedSeed))
+
+	err = buf.WriteByte(p.GameMode)
+	if err != nil {
+		return err
+	}
+
+	err = buf.WriteByte(p.PreviousGameMode)
+	if err != nil {
+		return err
+	}
+
+	err = buf.WriteByte(datatypes.WriteBoolean(p.IsDebug))
+	if err != nil {
+		return err
+	}
+
+	err = buf.WriteByte(datatypes.WriteBoolean(p.IsFlat))
+	if err != nil {
+		return err
+	}
+
+	err = buf.WriteByte(datatypes.WriteBoolean(p.HasDeathLocation))
+	if err != nil {
+		return err
+	}
+
+	if p.HasDeathLocation {
+		_, err = buf.Write(datatypes.WriteString(p.DeathDimensionName))
+		if err != nil {
+			return err
+		}
+
+		binary.LittleEndian.PutUint64(buf.Next(8), uint64(datatypes.WritePosition(p.DeathLocation)))
+	}
+
+	_, err = buf.Write(datatypes.BinaryWriteVarInt(int(p.PortalCooldown)))
+	if err != nil {
+		return err
+	}
+
+	err = buf.WriteByte(datatypes.WriteBoolean(p.EnforcesSecureChat))
+	if err != nil {
+		return err
+	}
+
+	_, err = w.Write(datatypes.BinaryWriteVarInt(buf.WriteCount()))
+	if err != nil {
+		return err
+	}
+
+	_, err = buf.WriteTo(w)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

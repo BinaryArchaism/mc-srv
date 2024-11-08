@@ -52,6 +52,15 @@ func (cb *CountingBuffer) Write(p []byte) (int, error) {
 	return n, nil
 }
 
+func (cb *CountingBuffer) WriteByte(c byte) error {
+	err := cb.Buffer.WriteByte(c)
+	if err != nil {
+		return err
+	}
+	cb.countWrite++
+	return nil
+}
+
 func (cb *CountingBuffer) WriteTo(w io.Writer) (int64, error) {
 	n, err := cb.Buffer.WriteTo(w)
 	if err != nil {
