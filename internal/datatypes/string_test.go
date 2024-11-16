@@ -2,21 +2,47 @@ package datatypes
 
 import (
 	"bytes"
-	"compress/zlib"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"math/rand"
 	"testing"
 )
 
+func TestString_Read(t *testing.T) {
+	buf := bytes.NewBuffer([]byte{0x03, 'a', 'b', 'c'})
+	var s String
+	err := s.Read(buf)
+	require.NoError(t, err)
+	require.Equal(t, "abc", s.String())
+}
+
+func TestString_Write(t *testing.T) {
+	buf := bytes.NewBuffer([]byte{})
+	s := String{
+		Size: 3,
+		Data: "abc",
+	}
+	err := s.Write(buf)
+	require.NoError(t, err)
+	require.Equal(t, []byte{0x03, 'a', 'b', 'c'}, buf.Bytes())
+}
+
 func TestString(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		rndStr := randStringRunes(rand.Intn(100))
-		ctmStr := FromString(rndStr)
-		bytesStr := WriteString(ctmStr)
-		ctmStr = ReadString(bytesStr)
-		outStr := ToString(ctmStr)
-		assert.Equal(t, rndStr, outStr)
+		var s String
+		s.FromString(rndStr)
+		require.Equal(t, rndStr, s.String())
+
+		buf := bytes.NewBuffer([]byte{})
+		err := s.Write(buf)
+		require.NoError(t, err)
+
+		var s2 String
+		buf = bytes.NewBuffer(buf.Bytes())
+		err = s2.Read(buf)
+		require.NoError(t, err)
+
+		require.Equal(t, s, s2)
 	}
 }
 
@@ -28,19 +54,4 @@ func randStringRunes(n int) string {
 		b[i] = letterRunes[rand.Intn(len(letterRunes))]
 	}
 	return string(b)
-}
-
-//FE01FA000B004D0043007C00500069006E00670048006F0073007400197F0009006C006F00630061006C0068006F0073007400001F90
-
-func TestReadString(t *testing.T) {
-	bstr := "FA000B004D0043007C00500069006E00670048006F0073007400197F0009006C006F00630061006C0068006F0073007400001F90"
-	var b []byte
-	for i := 0; i < len(bstr); i++ {
-
-	}
-
-	uncompressed, err := zlib.NewReader(bytes.NewReader(b))
-	require.NoError(t, err)
-
-	t.Log(uncompressed)
 }
