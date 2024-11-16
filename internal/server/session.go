@@ -221,29 +221,29 @@ func (s *Session) ConfigurationSession() error {
 }
 
 func (s *Session) PlaySession() error {
-	playLogin := protocol.LoginPlayPacket{
-		EntityID:            0,
-		IsHardcore:          false,
-		DimensionCount:      0,
-		DimensionNames:      nil,
-		MaxPlayers:          0,
-		ViewDistance:        0,
-		SimulationDistance:  0,
-		ReducedDebugInfo:    false,
-		EnableRespawnScreen: false,
-		DoLimitedCrafting:   false,
-		DimensionType:       0,
-		DimensionName:       datatypes.String{},
-		HashedSeed:          0,
-		GameMode:            0,
-		PreviousGameMode:    0,
-		IsDebug:             false,
-		IsFlat:              false,
-		HasDeathLocation:    false,
-		DeathDimensionName:  datatypes.String{},
-		DeathLocation:       datatypes.Position{},
-		PortalCooldown:      0,
-		EnforcesSecureChat:  false,
-	}
+	//playLogin := protocol.LoginPlayPacket{
+	//	EntityID:            0,
+	//	IsHardcore:          false,
+	//	DimensionCount:      0,
+	//	DimensionNames:      nil,
+	//	MaxPlayers:          0,
+	//	ViewDistance:        0,
+	//	SimulationDistance:  0,
+	//	ReducedDebugInfo:    false,
+	//	EnableRespawnScreen: false,
+	//	DoLimitedCrafting:   false,
+	//	DimensionType:       0,
+	//	DimensionName:       datatypes.String{},
+	//	HashedSeed:          0,
+	//	GameMode:            0,
+	//	PreviousGameMode:    0,
+	//	IsDebug:             false,
+	//	IsFlat:              false,
+	//	HasDeathLocation:    false,
+	//	DeathDimensionName:  datatypes.String{},
+	//	DeathLocation:       datatypes.Position{},
+	//	PortalCooldown:      0,
+	//	EnforcesSecureChat:  false,
+	//}
 	return nil
 }

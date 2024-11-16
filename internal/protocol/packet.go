@@ -17,21 +17,21 @@ type HandshakePacket struct {
 	Packet
 
 	ProtocolVersion int
-	ServerAddress   datatypes.String
-	ServerPort      datatypes.UShort
+	ServerAddress   string
+	ServerPort      int
 	NextState       int
 }
 
 func (p *HandshakePacket) Read(r io.Reader) error {
-	b := Pool.GetN(SmallObjectSize)
-	defer Pool.Put(b)
+	poolBytes := Pool.GetN(SmallObjectSize)
+	defer Pool.Put(poolBytes)
 
-	_, err := r.Read(b)
+	_, err := r.Read(poolBytes[:cap(poolBytes)])
 	if err != nil {
 		return err
 	}
 
-	buf := bytes.NewBuffer(b)
+	buf := countingbuffer.New(poolBytes)
 
 	p.Length, err = datatypes.BinaryReadVarInt(buf)
 	if err != nil {
@@ -48,12 +48,15 @@ func (p *HandshakePacket) Read(r io.Reader) error {
 		return err
 	}
 
-	p.ServerAddress = datatypes.ReadStringReader(buf)
+	serverAddress := datatypes.ReadStringReader(buf)
+	p.ServerAddress = serverAddress.Data
 
-	err = p.ServerPort.Read(buf)
+	var serverPort datatypes.UShort
+	err = serverPort.Read(buf)
 	if err != nil {
 		return err
 	}
+	p.ServerPort = int(serverPort)
 
 	p.NextState, err = datatypes.BinaryReadVarInt(buf)
 	if err != nil {
