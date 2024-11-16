@@ -18,9 +18,55 @@ const (
 	int32Len          = 32
 )
 
-// VarInt for LEB128 representation
 type VarInt int32
 
+func (v *VarInt) Write(w io.ByteWriter) error {
+	var (
+		err error
+		b   = uint32(*v)
+	)
+	for {
+		if b & ^(uint32(segmentBits)) == 0 {
+			err = w.WriteByte(byte(b))
+			if err != nil {
+				return err
+			}
+			return nil
+		}
+		err = w.WriteByte(byte((b & uint32(segmentBits)) | uint32(continueBit)))
+		if err != nil {
+			return err
+		}
+		b = b >> shift
+	}
+}
+
+func (v *VarInt) Read(r io.ByteReader) error {
+	var (
+		pos int32
+		res int32
+		b   byte
+		err error
+	)
+	for {
+		b, err = r.ReadByte()
+		if err != nil {
+			return err
+		}
+		res |= (int32(b & segmentBits)) << pos
+		if b&continueBit == 0 {
+			break
+		}
+		pos += shift
+	}
+
+	*v = VarInt(res)
+
+	return nil
+}
+
+// WriteVarInt
+// Deprecated
 func WriteVarInt(v VarInt) []byte {
 	buf := bytes.NewBuffer([]byte{})
 	b := uint32(v)
@@ -34,6 +80,8 @@ func WriteVarInt(v VarInt) []byte {
 	}
 }
 
+// ReadVarInt
+// Deprecated
 func ReadVarInt(in []byte) (VarInt, error) {
 	var (
 		res int32
@@ -54,6 +102,8 @@ func ReadVarInt(in []byte) (VarInt, error) {
 	return VarInt(res), nil
 }
 
+// ReadVarIntN
+// Deprecated
 func ReadVarIntN(in []byte) (VarInt, int, error) {
 	var (
 		res int32
@@ -76,6 +126,8 @@ func ReadVarIntN(in []byte) (VarInt, int, error) {
 	return VarInt(res), n, nil
 }
 
+// BinaryReadVarInt
+// Deprecated
 func BinaryReadVarInt(in io.ByteReader) (int, error) {
 	pl, err := binary.ReadUvarint(in)
 	if err != nil {
@@ -84,6 +136,8 @@ func BinaryReadVarInt(in io.ByteReader) (int, error) {
 	return int(pl), nil
 }
 
+// BinaryWriteVarInt
+// Deprecated
 func BinaryWriteVarInt(v int) []byte {
 	if v < 0 {
 		panic(ErrInvalidVarInt)
