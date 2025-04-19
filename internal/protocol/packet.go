@@ -6,11 +6,12 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"io"
+	"os"
+
 	"github.com/BinaryArchaism/mc-srv/internal/countingbuffer"
 	"github.com/BinaryArchaism/mc-srv/internal/datatypes"
 	"github.com/google/uuid"
-	"io"
-	"os"
 )
 
 type HandshakePacket struct {
@@ -95,7 +96,7 @@ type JSONResponse struct {
 
 func (p *StatusResponsePacket) Write(w io.Writer) error {
 	// todo must do it once on startup
-	data, err := os.ReadFile("resources/icon.png")
+	data, err := os.ReadFile("../../resources/icon.png")
 	if err != nil {
 		return err
 	}

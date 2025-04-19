@@ -16,7 +16,7 @@ type Server struct {
 }
 
 func New() (*Server, error) {
-	listener, err := net.Listen("tcp", ":8080")
+	listener, err := net.Listen("tcp", "0.0.0.0:8080")
 	if err != nil {
 		log.Err(err).Msg("Error starting TCP server")
 		return nil, err
